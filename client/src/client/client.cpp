@@ -1,22 +1,9 @@
 #include "../include.h"
 #include "client.h"
 
-#include "ca.h"
-
 void tcp::client::start(const std::string_view server_ip, const uint16_t port) {
-	wolfSSL_library_init();
-
-	m_ssl_ctx = wolfSSL_CTX_new(wolfTLS_client_method());
-
-	int ret = wolfSSL_CTX_load_verify_buffer(m_ssl_ctx, reinterpret_cast<const unsigned char*>(root_cert.data()), root_cert.size(), SSL_FILETYPE_PEM);
-	if (ret != 1) {
-		io::log_error("failed to load ca.");
-		return;
-	}
-	wolfSSL_CTX_set_verify(m_ssl_ctx, SSL_VERIFY_PEER, 0);
-
 	WSADATA data;
-	ret = WSAStartup(MAKEWORD(2, 2), &data);
+	int ret = WSAStartup(MAKEWORD(2, 2), &data);
 	if (ret != 0) {
 		io::log_error("failed to initialize WSA.");
 		return;
@@ -38,17 +25,6 @@ void tcp::client::start(const std::string_view server_ip, const uint16_t port) {
 		sizeof(server_addr));
 	if (ret < 0) {
 		io::log_error("failed to connect to server.");
-		return;
-	}
-
-	m_server_ssl = wolfSSL_new(m_ssl_ctx);
-	wolfSSL_set_fd(m_server_ssl, m_socket);
-
-	ret = wolfSSL_connect(m_server_ssl);
-
-	if (ret != 1) {
-		ret = wolfSSL_get_error(m_server_ssl, ret);
-		io::log_error("secure connection failed, code {}", ret);
 		return;
 	}
 

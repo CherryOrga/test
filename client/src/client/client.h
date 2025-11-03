@@ -1,8 +1,5 @@
 #pragma once
 
-#include <wolfssl/IDE/WIN/user_settings.h>
-#include <wolfssl/ssl.h>
-
 #include "../util/io.h"
 #include "../util/events.h"
 #include "packet.h"
@@ -46,8 +43,6 @@ namespace tcp {
 		int m_socket;
 		std::atomic<bool> m_active;
 
-		WOLFSSL* m_server_ssl;
-		WOLFSSL_CTX* m_ssl_ctx;
 	public:
 		int state;
 		int login_result;
@@ -62,7 +57,7 @@ namespace tcp {
 
 		uint16_t ver = 4672;
 
-		client() : m_socket{ -1 }, m_active{ false }, state{ client_state::connecting }, m_server_ssl{ nullptr }, m_ssl_ctx{ nullptr }, login_result{ -1 }, hwid_result{ -1 } {}
+		client() : m_socket{ -1 }, m_active{ false }, state{ client_state::connecting }, login_result{ -1 }, hwid_result{ -1 } {}
 
 		void start(const std::string_view server_ip, const uint16_t port);
 
@@ -72,11 +67,11 @@ namespace tcp {
 		}
 
 		__forceinline int write(const void* data, int size) {
-			return wolfSSL_write(m_server_ssl, data, size);
+			return send(m_socket, data, size, 0);
 		}
 
 		__forceinline int read(void* data, int size) {
-			return wolfSSL_read(m_server_ssl, data, size);
+			return recv(m_socket, data, size, 0);
 		}
 
 		int read_stream(std::vector<char>& out);
@@ -101,13 +96,9 @@ namespace tcp {
 		__forceinline void shutdown() {
 			m_active.store(false);
 
-			if (m_server_ssl) {
+			if (m_socket > 0) {
 				closesocket(m_socket);
-				wolfSSL_shutdown(m_server_ssl);
-				wolfSSL_free(m_server_ssl);
-
 				m_socket = -1;
-				m_server_ssl = nullptr;
 			}
 		}
 

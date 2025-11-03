@@ -7,6 +7,3 @@
 [submodule "shared/linux-pe"]
 	path = shared/linux-pe
 	url = https://github.com/can1357/linux-pe.git
-[submodule "client/wolfssl"]
-	path = client/wolfssl
-	url = https://github.com/wolfSSL/wolfssl.git

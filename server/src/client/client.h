@@ -21,7 +21,6 @@ enum hwid_result {
 
 class client {
   int m_socket;
-  SSL* m_ssl;
 
   std::time_t m_time;
 
@@ -38,18 +37,11 @@ class client {
 
   client() : m_socket{-1} {};
   client(const int& socket, const std::string_view ip)
-      : m_socket{std::move(socket)}, m_ip{ip}, m_ssl{nullptr}, state{-1} {}
+      : m_socket{std::move(socket)}, m_ip{ip}, state{-1} {}
   ~client() = default;
-
-  bool init_ssl(SSL_CTX* server_ctx);
 
   void cleanup() {
     close(m_socket);
-    if (m_ssl) {
-      SSL_shutdown(m_ssl);
-      SSL_free(m_ssl);
-    }
-
     m_socket = -1;
   }
 
@@ -71,10 +63,10 @@ class client {
   }
 
   int write(const void* data, size_t size) {
-    return SSL_write(m_ssl, data, size);
+    return send(m_socket, data, size, 0);
   }
 
-  int read(void* data, size_t size) { return SSL_read(m_ssl, data, size); }
+  int read(void* data, size_t size) { return recv(m_socket, data, size, 0); }
 
   int stream(std::vector<char>& data, float* dur = nullptr);
   int read_stream(std::vector<char>& out);

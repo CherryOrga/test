@@ -9,11 +9,6 @@ void tcp::server::start() {
 
   io::logger->info("starting server on port {}...", m_port.data());
 
-  ssl ctx("ssl/server.crt", "ssl/server.key", "ssl/rootCA.crt");
-  if (!ctx.init()) return;
-
-  m_ctx = std::move(ctx.get_context());
-
   m_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (m_socket < 0) {
     io::logger->critical("failed to create socket.");
@@ -107,10 +102,6 @@ void tcp::server::accept_client() {
     close(client_socket);
   } else {
     client cli(client_socket, ip);
-    if (!cli.init_ssl(m_ctx)) {
-      cli.cleanup();
-      return;
-    }
 
     auto it = std::find_if(client_stack.begin(), client_stack.end(),
                            [&](client& c) { return c.get_ip() == ip; });

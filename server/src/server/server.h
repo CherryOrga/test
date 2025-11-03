@@ -4,7 +4,6 @@
 #include "../client/blacklist.h"
 #include "../forum/forum.h"
 #include "../image/pe.h"
-#include "ssl.h"
 
 namespace tcp {
 constexpr uint8_t server_version = 0;
@@ -16,7 +15,6 @@ class server {
   std::string_view m_port;
 
   fd_set m_server_set;
-  SSL_CTX* m_ctx;
 
   std::atomic<bool> m_active;
 

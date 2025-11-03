@@ -38,8 +38,6 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
-#include <openssl/ssl.h>
-
 #include <linux-pe/linuxpe>
 
 #include "util/util.h"
