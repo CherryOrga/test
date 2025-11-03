@@ -19,7 +19,9 @@ enum packet_id {
   security_report,
   ban,
   game_select,
-  image
+  image,
+  function_request,
+  function_bytes
 };
 
 struct packet_t {
