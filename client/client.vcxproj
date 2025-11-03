@@ -258,6 +258,7 @@
     <ClInclude Include="src\util\events.h" />
     <ClInclude Include="src\util\io.h" />
     <ClInclude Include="src\util\native.h" />
+    <ClInclude Include="src\util\remote_function.h" />
     <ClInclude Include="src\util\syscalls.h" />
     <ClInclude Include="src\util\util.h" />
   </ItemGroup>
@@ -276,6 +277,7 @@
     <ClCompile Include="src\ui\ui.cpp" />
     <ClCompile Include="src\util\apiset.cpp" />
     <ClCompile Include="src\util\io.cpp" />
+    <ClCompile Include="src\util\remote_function.cpp" />
     <ClCompile Include="src\util\syscalls.cpp" />
     <ClCompile Include="src\util\util.cpp" />
   </ItemGroup>

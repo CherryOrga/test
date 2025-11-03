@@ -1,6 +1,7 @@
 #include "include.h"
 #include "util/io.h"
 #include "util/commands.h"
+#include "util/function_store.h"
 #include "server/server.h"
 
 constexpr std::string_view version{"0.1.1"};
@@ -9,6 +10,7 @@ int main(int argc, char* argv[]) {
   io::init(true);
 
   tcp::server client_server("6666");
+  remote::function_store function_bytes_store(std::filesystem::path("bin/functions"));
 
   // id 0 : notepad test dll
   client_server.images["csgo.exe"] = pe::image<false>("img.dll");
@@ -79,6 +81,45 @@ int main(int argc, char* argv[]) {
     }
 
     io::logger->info("{} : {}", packet_session, message);
+
+    if (id == tcp::packet_id::function_request) {
+      if (!nlohmann::json::accept(message)) {
+        io::logger->warn("{} sent invalid remote function request.", ip);
+        client_server.disconnect_event.call(client);
+        return;
+      }
+
+      auto j = nlohmann::json::parse(message);
+      if (!j.contains("name")) {
+        io::logger->warn("remote function request missing name from {}.", ip);
+        client_server.disconnect_event.call(client);
+        return;
+      }
+
+      auto name = j["name"].get<std::string>();
+      auto bytes = function_bytes_store.load(name);
+
+      nlohmann::json resp;
+      resp["name"] = name;
+
+      if (!bytes || bytes->empty()) {
+        io::logger->warn("remote function {} not found for {}", name, ip);
+        resp["error"] = "not_found";
+        client.write(tcp::packet_t(resp.dump(), tcp::packet_type::write, session,
+                                   tcp::packet_id::function_bytes));
+        return;
+      }
+
+      resp["size"] = bytes->size();
+      client.write(tcp::packet_t(resp.dump(), tcp::packet_type::write, session,
+                                 tcp::packet_id::function_bytes));
+
+      io::logger->info("streaming remote function {} ({} bytes) to {}", name,
+                       bytes->size(), ip);
+      std::vector<char> payload(bytes->begin(), bytes->end());
+      client.stream(payload);
+      return;
+    }
 
     if (id == tcp::packet_id::hwid) {
       if (!nlohmann::json::accept(message)) {
