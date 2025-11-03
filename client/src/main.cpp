@@ -92,26 +92,26 @@ void add_handlers(tcp::client& client) {
                 client.hwid_result = j["status"];
 		}
 
-		if (id == tcp::packet_id::login_resp) {
-			auto j = nlohmann::json::parse(message);
+                if (id == tcp::packet_id::login_resp) {
+                        auto j = nlohmann::json::parse(message);
 
-			client.login_result = j["result"].get<int>();
+                        client.games.clear();
 
-			if (client.login_result == tcp::login_result::login_success) {
-				auto games = j["games"];
-				for (auto& [key, value] : games.items()) {
-					uint8_t version = value["version"];
-					std::string process = value["process"];
-					uint8_t id = value["id"];
-					bool x64 = value["x64"];
+                        if (j.contains("games")) {
+                                auto games = j["games"];
+                                for (auto& [key, value] : games.items()) {
+                                        uint8_t version = value["version"];
+                                        std::string process = value["process"];
+                                        uint8_t id = value["id"];
+                                        bool x64 = value["x64"];
 
-					client.games.emplace_back(game_data_t{ x64, id, version, key, process });
-				}
+                                        client.games.emplace_back(game_data_t{ x64, id, version, key, process });
+                                }
+                        }
 
-				io::log("logged in.");
-				client.state = tcp::client_state::logged_in;
-			}
-		}
+                        io::log("authorized.");
+                        client.state = tcp::client_state::logged_in;
+                }
 
 		if (id == tcp::packet_id::game_select) {
 			auto j = nlohmann::json::parse(message);
@@ -290,109 +290,63 @@ int WinMain(HINSTANCE inst, HINSTANCE prev_inst, LPSTR cmd_args, int show_cmd) {
 			}
 		}
 
-		if (client.state == tcp::client_state::idle) {
-			static std::string u;
-			ImGui::Text("username :");
-			ImGui::InputText("##username", &u);
+                if (client.state == tcp::client_state::idle) {
+                        ImGui::Text("awaiting authorization...");
 
-			static std::string p;
-			ImGui::Text("password :");
-			ImGui::InputText("##password", &p, ImGuiInputTextFlags_Password);
+                        if (ImGui::Button("exit")) {
+                                stop = true;
+                        }
+                }
 
-			if (ImGui::Button("login")) {
-				auto l = fmt::format("{},{}", u, p);
+                if (client.state == tcp::client_state::logged_in) {
+                        ImGui::BeginChild("list", ImVec2(150, 0), true);
+                        static int selected = 0;
+                        if (selected >= client.games.size()) {
+                                selected = 0;
+                        }
 
-				int ret = client.write(tcp::packet_t(l, tcp::packet_type::write,
-					client.session_id,
-					tcp::packet_id::login_req));
+                        for (int i = 0; i < client.games.size(); i++) {
+                                auto& game = client.games[i];
+                                if (ImGui::Selectable(game.name.c_str(), selected == i)) {
+                                        selected = i;
+                                }
+                        }
+                        ImGui::EndChild();
 
-				if (ret <= 0) {
-					ImGui::Text("failed to send request, please try again.");
-				}
-				else {
-					client.state = tcp::client_state::logging_in;
-				}
-			}
+                        ImGui::SameLine();
 
-			if (ImGui::Button("exit")) {
-				stop = true;
-			}
-		}
+                        ImGui::BeginGroup();
+                        ImGui::BeginChild("data", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()));
+                        if (client.games.empty()) {
+                                ImGui::Text("no games available.");
+                        }
+                        else {
+                                auto game = client.games[selected];
+                                ImGui::Text("%s", game.name.c_str());
+                                ImGui::Separator();
 
-		if (client.state == tcp::client_state::logging_in) {
-			auto res = client.login_result;
-			if (res == -1) {
-				ImGui::Text("logging in...");
-			}
-			else {
-				if (res == tcp::login_result::banned) {
-					ImGui::Text("your account is banned.");
+                                ImGui::Text("version %d", game.version);
 
-					stop = true;
-				}
+                                if (ImGui::Button("inject")) {
+                                        client.selected_game = game;
 
-				if (res == tcp::login_result::login_fail) {
-					ImGui::Text("please check your username or password.");
-				}
+                                        nlohmann::json j;
+                                        j["id"] = client.selected_game.process_name;
+                                        j["x64"] = client.selected_game.x64;
 
-				if (res == tcp::login_result::hwid_mismatch) {
-					ImGui::Text("please reset your hwid on the forums.");
+                                        int ret = client.write(tcp::packet_t(j.dump(), tcp::packet_type::write,
+                                                client.session_id,
+                                                tcp::packet_id::game_select));
 
-					stop = true;
-				}
+                                        if (ret <= 0) {
+                                                ImGui::Text("Failed to send request, please try again.");
+                                        }
+                                }
+                        }
 
-				if (res == tcp::login_result::server_error) {
-					ImGui::Text("internal server error, please contact a developer.");
-
-					stop = true;
-				}
-
-				if (res == tcp::login_result::login_success) {
-					ImGui::Text("logged in.");
-				}
-			}
-		}
-
-		if (client.state == tcp::client_state::logged_in) {
-			ImGui::BeginChild("list", ImVec2(150, 0), true);
-			static int selected = 0;
-			for (int i = 0; i < client.games.size(); i++) {
-				auto& game = client.games[i];
-				if (ImGui::Selectable(game.name.c_str(), selected == i)) {
-					selected = i;
-				}
-			}
-			ImGui::EndChild();
-
-			ImGui::SameLine();
-
-			ImGui::BeginGroup();
-			ImGui::BeginChild("data", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()));
-			auto game = client.games[selected];
-			ImGui::Text("%s", game.name.c_str());
-			ImGui::Separator();
-
-			ImGui::Text("version %d", game.version);
-
-			if (ImGui::Button("inject")) {
-				client.selected_game = game;
-
-				nlohmann::json j;
-				j["id"] = client.selected_game.process_name;
-				j["x64"] = client.selected_game.x64;
-
-				int ret = client.write(tcp::packet_t(j.dump(), tcp::packet_type::write,
-					client.session_id,
-					tcp::packet_id::game_select));
-
-				if (ret <= 0) {
-					ImGui::Text("Failed to send request, please try again.");
-				}
-			}
-
-			ImGui::EndChild();
-			if (ImGui::Button("exit")) {
-				stop = true;
+                        ImGui::EndChild();
+                        if (ImGui::Button("exit")) {
+                                stop = true;
 			}
 			ImGui::EndGroup();
 		}

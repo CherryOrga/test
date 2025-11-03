@@ -32,8 +32,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <cpr/cpr.h>
-
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>

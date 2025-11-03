@@ -2,7 +2,6 @@
 #include "../client/client.h"
 #include "../util/events.h"
 #include "../client/blacklist.h"
-#include "../forum/forum.h"
 #include "../image/pe.h"
 
 namespace tcp {
@@ -21,7 +20,6 @@ class server {
   std::vector<tcp::client> client_stack;
 
   blacklist m_blacklist;
-  xenforo_forum m_forum;
  public:
   event<client&> connect_event;
   event<packet_t&, client&> receive_event;
@@ -46,7 +44,6 @@ class server {
   auto &operator()() { return client_stack; }
 
   auto &bl() { return m_blacklist; }
-  auto &forum() { return m_forum; }
 
   static void monitor(server& srv) {
     while (srv) {

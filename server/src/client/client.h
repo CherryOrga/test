@@ -30,7 +30,6 @@ class client {
  public:
   uint32_t hwid;
   std::string hwid_data;
-  std::string username;
   int state;
 
   std::time_t security_time;
