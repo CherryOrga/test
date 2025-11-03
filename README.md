@@ -16,7 +16,7 @@ open the solution and build.
 # Features
 - communication using TLS 1.3 + small xor implementation.
 - json client-server communication, packet struct implementation for easier parsing.
-- support for Xenforo forum integration on the server.
+- streamlined authorization flow without external forum dependencies.
 - support for 32-64bit processes.
 - syscalls.
 - module patch detection.

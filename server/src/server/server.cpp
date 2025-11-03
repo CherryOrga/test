@@ -5,8 +5,6 @@
 void tcp::server::start() {
   m_blacklist.init();
 
-  m_forum.init("", "");
-
   io::logger->info("starting server on port {}...", m_port.data());
 
   m_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);

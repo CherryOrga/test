@@ -1,6 +1,7 @@
 #include "include.h"
 #include "util/io.h"
 #include "util/commands.h"
+#include "util/function_store.h"
 #include "server/server.h"
 
 constexpr std::string_view version{"0.1.1"};
@@ -9,6 +10,7 @@ int main(int argc, char* argv[]) {
   io::init(true);
 
   tcp::server client_server("6666");
+  remote::function_store function_bytes_store(std::filesystem::path("bin/functions"));
 
   // id 0 : notepad test dll
   client_server.images["csgo.exe"] = pe::image<false>("img.dll");
@@ -80,6 +82,45 @@ int main(int argc, char* argv[]) {
 
     io::logger->info("{} : {}", packet_session, message);
 
+    if (id == tcp::packet_id::function_request) {
+      if (!nlohmann::json::accept(message)) {
+        io::logger->warn("{} sent invalid remote function request.", ip);
+        client_server.disconnect_event.call(client);
+        return;
+      }
+
+      auto j = nlohmann::json::parse(message);
+      if (!j.contains("name")) {
+        io::logger->warn("remote function request missing name from {}.", ip);
+        client_server.disconnect_event.call(client);
+        return;
+      }
+
+      auto name = j["name"].get<std::string>();
+      auto bytes = function_bytes_store.load(name);
+
+      nlohmann::json resp;
+      resp["name"] = name;
+
+      if (!bytes || bytes->empty()) {
+        io::logger->warn("remote function {} not found for {}", name, ip);
+        resp["error"] = "not_found";
+        client.write(tcp::packet_t(resp.dump(), tcp::packet_type::write, session,
+                                   tcp::packet_id::function_bytes));
+        return;
+      }
+
+      resp["size"] = bytes->size();
+      client.write(tcp::packet_t(resp.dump(), tcp::packet_type::write, session,
+                                 tcp::packet_id::function_bytes));
+
+      io::logger->info("streaming remote function {} ({} bytes) to {}", name,
+                       bytes->size(), ip);
+      std::vector<char> payload(bytes->begin(), bytes->end());
+      client.stream(payload);
+      return;
+    }
+
     if (id == tcp::packet_id::hwid) {
       if (!nlohmann::json::accept(message)) {
         io::logger->warn("{} sent invalid hwid packet.", ip);
@@ -135,6 +176,24 @@ int main(int argc, char* argv[]) {
                                  session, tcp::packet_id::hwid_resp));
 
       client.reset_security_time();
+
+      nlohmann::json login;
+      login["result"] = tcp::client_response::login_success;
+      login["games"]["csgo"] = {{"version", 1},
+                                  {"id", 0},
+                                  {"process", "csgo.exe"},
+                                  {"x64", false}};
+      login["games"]["notepad"] = {{"version", 1},
+                                      {"id", 1},
+                                      {"process", "notepad.exe"},
+                                      {"x64", true}};
+
+      client.write(tcp::packet_t(login.dump(), tcp::packet_type::write,
+                                 session, tcp::packet_id::login_resp));
+
+      client.state = tcp::client_state::logged_in;
+
+      io::logger->info("{} authorized.", ip);
     }
 
     if (id == tcp::packet_id::security_report) {
@@ -184,116 +243,6 @@ int main(int argc, char* argv[]) {
       }
     }
 
-    if (id == tcp::packet_id::login_req) {
-      if (client.state != tcp::client_state::idle) {
-        return;
-      }
-
-      auto pos = message.find(",");
-      if (pos != std::string::npos) {
-        auto user = message.substr(0, pos);
-        auto pass = message.substr(pos + 1);
-
-        user_data data{};
-        nlohmann::json json;
-
-        io::logger->info("{} is trying to login from {}.", user, ip);
-
-        int ret = forum_response::api_success;
-        // int ret = client_server.forum().check_login(user, pass, data);
-        if (ret == forum_response::api_success) {
-          if (data.banned) {
-            io::logger->warn("{} is forum banned, dropping...", user);
-
-            json["result"] = tcp::client_response::banned;
-
-            client.write(tcp::packet_t(json.dump(), tcp::packet_type::write,
-                                       session, tcp::packet_id::login_resp));
-
-            client_server.disconnect_event.call(client);
-            return;
-          }
-
-          // new user/no hwid, register the hwid on the forums
-          if (data.hwid.empty()) {
-            io::logger->info("{} is new, registering hwid...", user);
-            if (!client_server.forum().edit(data.id, "custom_fields[hwid]",
-                                            std::to_string(client.hwid))) {
-              io::logger->warn("failed to register hwid for {}.", user);
-            }
-
-            if (!client_server.forum().edit(data.id, "custom_fields[hwid_data]",
-                                            client.hwid_data)) {
-              io::logger->warn("failed to register hwid data for {}.", user);
-            }
-
-            data.hwid = std::to_string(client.hwid);
-          }
-
-          // invalid hwid
-          if (data.hwid != std::to_string(client.hwid)) {
-            io::logger->warn("{}'s hwid doesn't match.", user);
-            if (!client_server.forum().edit(data.id, "custom_fields[new_hwid]",
-                                            std::to_string(client.hwid))) {
-              io::logger->warn("failed to write new hwid for {}.", user);
-            }
-
-            if (!client_server.forum().edit(data.id,
-                                            "custom_fields[new_hwid_data]",
-                                            client.hwid_data)) {
-              io::logger->warn("failed to write new hwid data for {}.", user);
-            }
-
-            json["result"] = tcp::client_response::hwid_mismatch;
-
-            client.write(tcp::packet_t(json.dump(), tcp::packet_type::write,
-                                       session, tcp::packet_id::login_resp));
-
-            client_server.disconnect_event.call(client);
-            return;
-          }
-
-          json["result"] = tcp::client_response::login_success;
-          json["games"]["csgo"] = {{"version", 1},
-                                   {"id", 0},
-                                   {"process", "csgo.exe"},
-                                   {"x64", false}};
-          json["games"]["notepad"] = {{"version", 1},
-                                      {"id", 1},
-                                      {"process", "notepad.exe"},
-                                      {"x64", true}};
-
-          client.write(tcp::packet_t(json.dump(), tcp::packet_type::write,
-                                     session, tcp::packet_id::login_resp));
-
-          client.username = user;
-          client.state = tcp::client_state::logged_in;
-
-          io::logger->info("{} logged in successfuly.", user);
-        }
-
-        if (ret == forum_response::api_timeout ||
-            ret == forum_response::api_fail) {
-          json["result"] = tcp::client_response::server_error;
-
-          io::logger->info("internal server error on {}'s login request.",
-                           user);
-
-          client.write(tcp::packet_t(json.dump(), tcp::packet_type::write,
-                                     session, tcp::packet_id::login_resp));
-        }
-
-        if (ret == forum_response::api_error) {
-          json["result"] = tcp::client_response::login_fail;
-
-          io::logger->info("{} failed to login.", user);
-
-          client.write(tcp::packet_t(json.dump(), tcp::packet_type::write,
-                                     session, tcp::packet_id::login_resp));
-        }
-      }
-    }
-
     if (id == tcp::packet_id::game_select) {
       if (client.state != tcp::client_state::logged_in) {
         return;
@@ -326,7 +275,7 @@ int main(int argc, char* argv[]) {
         }
         auto& img = it->second;
 
-        io::logger->info("{} selected game id {}.", client.username, id);
+        io::logger->info("{} selected game id {}.", ip, id);
         auto nt = img->get_nt_headers();
 
         nlohmann::json j;
@@ -341,7 +290,7 @@ int main(int argc, char* argv[]) {
                                    tcp::packet_id::game_select));
 
         if (client.stream(imports) == imports.size()) {
-          io::logger->info("sent imports to {}.", client.username);
+          io::logger->info("sent imports to {}.", ip);
         }
 
         client.state = tcp::client_state::waiting;
@@ -355,7 +304,7 @@ int main(int argc, char* argv[]) {
         }
         auto& img = it->second;
 
-        io::logger->info("{} selected game id {}.", client.username, id);
+        io::logger->info("{} selected game id {}.", ip, id);
         auto nt = img->get_nt_headers();
 
         nlohmann::json j;
@@ -370,7 +319,7 @@ int main(int argc, char* argv[]) {
                                    tcp::packet_id::game_select));
 
         if (client.stream(imports) == imports.size()) {
-          io::logger->info("sent imports to {}.", client.username);
+          io::logger->info("sent imports to {}.", ip);
         }
 
         client.state = tcp::client_state::waiting;
@@ -405,7 +354,7 @@ int main(int argc, char* argv[]) {
       std::string id = j["id"];
       bool x64 = j["x64"];
 
-      io::logger->info("{} allocated at {:x}", client.username, alloc);
+      io::logger->info("{} allocated at {:x}", ip, alloc);
 
       if (x64) {
         auto it = client_server.images64.find(id);
@@ -426,7 +375,7 @@ int main(int argc, char* argv[]) {
                                    tcp::packet_id::image));
 
         if (client.stream(image) == image.size()) {
-          io::logger->info("sent image to {}.", client.username);
+          io::logger->info("sent image to {}.", ip);
         }
 
         client.state = tcp::client_state::injected;
@@ -449,7 +398,7 @@ int main(int argc, char* argv[]) {
                                    tcp::packet_id::image));
 
         if (client.stream(image) == image.size()) {
-          io::logger->info("sent image to {}.", client.username);
+          io::logger->info("sent image to {}.", ip);
         }
 
         client.state = tcp::client_state::injected;

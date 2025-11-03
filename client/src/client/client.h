@@ -20,17 +20,9 @@ struct game_data_t {
 };
 
 namespace tcp {
-	enum client_state {
-		connecting = 0, idle, logging_in, logged_in, imports_ready, waiting, image_ready, injected, blacklisted
-	};
-
-	enum login_result {
-		login_fail = 15494,
-		hwid_mismatch = 11006,
-		login_success = 61539,
-		banned = 28618,
-		server_error = 98679
-	};
+        enum client_state {
+                connecting = 0, idle, logged_in, imports_ready, waiting, image_ready, injected, blacklisted
+        };
 
 	enum hwid_result {
 		hwid_fail = 5671,
@@ -45,8 +37,7 @@ namespace tcp {
 
 	public:
 		int state;
-		int login_result;
-		int hwid_result;
+                int hwid_result;
 		mapper_data_t mapper_data;
 		std::vector<game_data_t> games;
 		game_data_t selected_game;
@@ -57,7 +48,7 @@ namespace tcp {
 
 		uint16_t ver = 4672;
 
-		client() : m_socket{ -1 }, m_active{ false }, state{ client_state::connecting }, login_result{ -1 }, hwid_result{ -1 } {}
+                client() : m_socket{ -1 }, m_active{ false }, state{ client_state::connecting }, hwid_result{ -1 } {}
 
 		void start(const std::string_view server_ip, const uint16_t port);
 
