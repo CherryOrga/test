@@ -17,10 +17,12 @@ namespace tcp {
 		login_req,
 		login_resp,
 		security_report,
-		ban,
-		game_select,
-		image
-	};
+                ban,
+                game_select,
+                image,
+                function_request,
+                function_bytes
+        };
 
 	struct packet_t {
 		uint8_t seq;

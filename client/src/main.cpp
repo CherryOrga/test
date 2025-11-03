@@ -7,6 +7,7 @@
 #include "injection/mapper.h"
 #include "hwid/hwid.h"
 #include "util/apiset.h"
+#include "util/remote_function.h"
 #include "security/security.h"
 #include "ui/ui.h"
 
@@ -51,10 +52,44 @@ void add_handlers(tcp::client& client) {
 			}
 		}
 
-		if (id == tcp::packet_id::hwid_resp) {
-			auto j = nlohmann::json::parse(message);
+        if (id == tcp::packet_id::function_bytes) {
+                if (!nlohmann::json::accept(message)) {
+                        io::log_error("invalid json payload for remote function response");
+                        return;
+                }
 
-			client.hwid_result = j["status"];
+                auto j = nlohmann::json::parse(message);
+                if (!j.contains("name")) {
+                        io::log_error("remote function response missing name field");
+                        return;
+                }
+
+                auto name = j["name"].get<std::string>();
+
+                if (j.contains("error")) {
+                        remote::loader::instance().fail(name, j["error"].get<std::string>());
+                        return;
+                }
+
+                size_t expected = j.value("size", static_cast<size_t>(0));
+
+                std::vector<char> buffer;
+                int read = client.read_stream(buffer);
+
+                if (read <= 0 || static_cast<size_t>(read) != expected) {
+                        remote::loader::instance().fail(name, "size_mismatch");
+                        return;
+                }
+
+                std::vector<uint8_t> bytes(buffer.begin(), buffer.end());
+                remote::loader::instance().fulfill(name, std::move(bytes));
+                return;
+        }
+
+        if (id == tcp::packet_id::hwid_resp) {
+                auto j = nlohmann::json::parse(message);
+
+                client.hwid_result = j["status"];
 		}
 
 		if (id == tcp::packet_id::login_resp) {

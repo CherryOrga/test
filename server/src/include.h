@@ -23,6 +23,7 @@
 #include <atomic>
 #include <mutex>
 #include <iomanip>
+#include <filesystem>
 
 #include <arpa/inet.h>
 #include <netdb.h>
