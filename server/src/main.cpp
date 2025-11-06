@@ -274,8 +274,8 @@ int main(int argc, char* argv[]) {
         io::logger->info("{} selected game id {}.", ip, id);
         auto nt = img->get_nt_headers();
 
-        // Validate PE image size (max 50MB)
-        constexpr size_t max_image_size = 50 * 1024 * 1024;
+        // Validate PE image size (max 1MB)
+        constexpr size_t max_image_size = 1 * 1024 * 1024;
         if (nt->optional_header.size_image > max_image_size) {
           io::logger->warn("{} PE image too large: {} bytes", ip, nt->optional_header.size_image);
           client_server.disconnect_event.call(client);
@@ -288,8 +288,8 @@ int main(int argc, char* argv[]) {
 
         auto imports = img.get_json_imports();
 
-        // Validate imports size (max 10MB)
-        constexpr size_t max_imports_size = 10 * 1024 * 1024;
+        // Validate imports size (max 1MB)
+        constexpr size_t max_imports_size = 1 * 1024 * 1024;
         if (imports.size() > max_imports_size) {
           io::logger->warn("{} imports too large: {} bytes", ip, imports.size());
           client_server.disconnect_event.call(client);
@@ -319,8 +319,8 @@ int main(int argc, char* argv[]) {
         io::logger->info("{} selected game id {}.", ip, id);
         auto nt = img->get_nt_headers();
 
-        // Validate PE image size (max 50MB)
-        constexpr size_t max_image_size = 50 * 1024 * 1024;
+        // Validate PE image size (max 1MB)
+        constexpr size_t max_image_size = 1 * 1024 * 1024;
         if (nt->optional_header.size_image > max_image_size) {
           io::logger->warn("{} PE image too large: {} bytes", ip, nt->optional_header.size_image);
           client_server.disconnect_event.call(client);
@@ -333,8 +333,8 @@ int main(int argc, char* argv[]) {
 
         auto imports = img.get_json_imports();
 
-        // Validate imports size (max 10MB)
-        constexpr size_t max_imports_size = 10 * 1024 * 1024;
+        // Validate imports size (max 1MB)
+        constexpr size_t max_imports_size = 1 * 1024 * 1024;
         if (imports.size() > max_imports_size) {
           io::logger->warn("{} imports too large: {} bytes", ip, imports.size());
           client_server.disconnect_event.call(client);

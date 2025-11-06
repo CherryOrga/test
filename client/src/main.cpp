@@ -167,9 +167,9 @@ void add_handlers(tcp::client& client) {
 			client.mapper_data.entry = j["pe"][1];
 			int imports_size = j["size"];
 
-			// Validate sizes
-			constexpr size_t max_image_size = 50 * 1024 * 1024;
-			constexpr size_t max_imports_size = 10 * 1024 * 1024;
+			// Validate sizes (max 1MB each)
+			constexpr size_t max_image_size = 1 * 1024 * 1024;
+			constexpr size_t max_imports_size = 1 * 1024 * 1024;
 			if (client.mapper_data.image_size > max_image_size || imports_size > max_imports_size) {
 				io::log_error("game_select sizes too large");
 				client.shutdown();

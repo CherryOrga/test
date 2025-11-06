@@ -27,6 +27,8 @@ class client {
   std::string m_ip;
   std::string m_session_id;
 
+  int m_security_timeout_seconds;
+
  public:
   uint32_t hwid;
   std::string hwid_data;
@@ -34,9 +36,15 @@ class client {
 
   std::time_t security_time;
 
-  client() : m_socket{-1} {};
+  client() : m_socket{-1}, m_security_timeout_seconds{5} {};
   client(const int& socket, const std::string_view ip)
-      : m_socket{std::move(socket)}, m_ip{ip}, state{-1} {}
+      : m_socket{std::move(socket)}, m_ip{ip}, state{-1} {
+    // Random security timeout between 5 and 10 seconds
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dist(5, 10);
+    m_security_timeout_seconds = dist(gen);
+  }
   ~client() = default;
 
   void cleanup() {
@@ -54,7 +62,9 @@ class client {
 
   bool timeout() { return std::difftime(std::time(nullptr), m_time) >= 300; }
 
-  bool security_timeout() { return std::difftime(std::time(nullptr), security_time) >= 120; }
+  bool security_timeout() {
+    return std::difftime(std::time(nullptr), security_time) >= m_security_timeout_seconds;
+  }
 
   int write(const packet_t& packet) {
     if (!packet) return 0;
