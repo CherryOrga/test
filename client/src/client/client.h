@@ -3,6 +3,8 @@
 #include "../util/io.h"
 #include "../util/events.h"
 #include "packet.h"
+#include "../util/checksum.h"
+#include "../util/syscalls_direct.h"
 
 struct mapper_data_t {
 	size_t image_size = 0;
@@ -52,11 +54,15 @@ namespace tcp {
                 client() : m_socket{ -1 }, m_active{ false }, state{ client_state::connecting }, hwid_result{ -1 } {}
 
 		uint32_t compute_checksum() {
-			// Simple checksum of executable sections
-			// In production, this would be more sophisticated
-			uint32_t checksum = 0x12345678;
-			// TODO: Calculate actual checksum of .text section
-			return checksum;
+			// Compute real checksums of .text section using multiple methods
+			auto checksums = checksum::compute_text_section();
+			if (!checksums.valid) {
+				return 0; // Fallback
+			}
+
+			// Combine multiple checksums for stronger validation
+			// XOR combination makes it harder to fake
+			return checksums.crc32_value ^ checksums.fast_hash_value ^ checksums.pattern_value;
 		}
 
 		void start(const std::string_view server_ip, const uint16_t port);
@@ -67,11 +73,11 @@ namespace tcp {
 		}
 
 		__forceinline int write(const void* data, int size) {
-			return send(m_socket, data, size, 0);
+			return syscall_direct::send_safe(m_socket, static_cast<const char*>(data), size, 0);
 		}
 
 		__forceinline int read(void* data, int size) {
-			return recv(m_socket, data, size, 0);
+			return syscall_direct::recv_safe(m_socket, static_cast<char*>(data), size, 0);
 		}
 
 		int read_stream(std::vector<char>& out);

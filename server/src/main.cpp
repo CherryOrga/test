@@ -144,10 +144,27 @@ int main(int argc, char* argv[]) {
 
       nlohmann::json response;
 
-      // Expected checksum (in production, store valid checksums in database)
-      constexpr uint32_t expected_checksum = 0x12345678;
+      // Expected checksums (in production, store valid checksums in database)
+      // Multiple checksums from different builds/compilers
+      // These should be computed from actual client builds
+      std::vector<uint32_t> valid_checksums = {
+          0x12345678,  // Debug build checksum (placeholder)
+          0x87654321,  // Release build checksum (placeholder)
+          0xABCDEF01,  // MSVC build (placeholder)
+          0xDEADBEEF   // MinGW build (placeholder)
+      };
+
       uint32_t client_checksum = j["checksum"];
-      if(client_checksum != expected_checksum) {
+      bool valid = false;
+      for (auto expected : valid_checksums) {
+          if (client_checksum == expected) {
+              valid = true;
+              io::logger->info("{} passed checksum validation: {:#x}", ip, client_checksum);
+              break;
+          }
+      }
+
+      if (!valid) {
         response["status"] = client.enum_map["hwid_result_version_mismatch"];
 
         io::logger->warn("{} has invalid client checksum: {:#x}", ip, client_checksum);
