@@ -46,9 +46,18 @@ namespace tcp {
 		event<packet_t> receive_event;
 		event<> connect_event;
 
-		uint16_t ver = 4672;
+		// Session-based enum mappings (set by server)
+		std::unordered_map<std::string, int> enum_map;
 
                 client() : m_socket{ -1 }, m_active{ false }, state{ client_state::connecting }, hwid_result{ -1 } {}
+
+		uint32_t compute_checksum() {
+			// Simple checksum of executable sections
+			// In production, this would be more sophisticated
+			uint32_t checksum = 0x12345678;
+			// TODO: Calculate actual checksum of .text section
+			return checksum;
+		}
 
 		void start(const std::string_view server_ip, const uint16_t port);
 

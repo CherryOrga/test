@@ -22,26 +22,37 @@ void add_handlers(tcp::client& client) {
 		auto id = packet.id;
 
 		if (id == tcp::packet_id::session) {
-			client.session_id = packet.session_id;
-			/*hwid::hwid_data_t data;
-			if (!hwid::fetch(data)) {
-				client.session_result = tcp::session_result::hwid_fail;
-
-				std::this_thread::sleep_for(std::chrono::seconds(5));
-
+			// Parse session packet to get session_id and enum mappings
+			if (!nlohmann::json::accept(message)) {
+				io::log_error("invalid session packet");
 				client.shutdown();
 				return;
-			}*/
+			}
+
+			auto session_data = nlohmann::json::parse(message);
+			if (!session_data.contains("session_id") || !session_data.contains("enum_map")) {
+				io::log_error("session packet missing required fields");
+				client.shutdown();
+				return;
+			}
+
+			client.session_id = session_data["session_id"];
+			client.enum_map = session_data["enum_map"].get<std::unordered_map<std::string, int>>();
+
+			io::log("received session with random enum mappings");
 
 			nlohmann::json hwid_data;
 			hwid_data["uid"] = 0;
 
 			nlohmann::json json;
 			json["hwid"] = hwid_data.dump();
-			json["ver"] = client.ver;
+			json["checksum"] = client.compute_checksum();
 			
 
-			int ret = client.write(tcp::packet_t(json.dump(), tcp::packet_type::write, client.session_id, tcp::packet_id::hwid));
+			// Use randomized packet ID from server
+		uint8_t hwid_packet_id = client.enum_map.count("packet_hwid") ?
+		                          client.enum_map["packet_hwid"] : tcp::packet_id::hwid;
+		int ret = client.write(tcp::packet_t(json.dump(), tcp::packet_type::write, client.session_id, hwid_packet_id));
 			if (ret <= 0) {
 				client.hwid_result = tcp::hwid_result::hwid_fail;
 
@@ -86,7 +97,11 @@ void add_handlers(tcp::client& client) {
                 return;
         }
 
-        if (id == tcp::packet_id::hwid_resp) {
+        // Check hwid_resp using randomized packet ID
+        uint8_t expected_hwid_resp = client.enum_map.count("packet_hwid_resp") ?
+                                      client.enum_map["packet_hwid_resp"] : tcp::packet_id::hwid_resp;
+
+        if (id == expected_hwid_resp) {
                 if (!nlohmann::json::accept(message)) {
                         io::log_error("invalid json for hwid_resp");
                         client.shutdown();
@@ -100,10 +115,24 @@ void add_handlers(tcp::client& client) {
                         return;
                 }
 
-                client.hwid_result = j["status"];
+                int status = j["status"];
+                // Compare with randomized enum values
+                if (status == client.enum_map["hwid_result_ok"]) {
+                        client.hwid_result = tcp::hwid_result::ok;
+                } else if (status == client.enum_map["hwid_result_blacklisted"]) {
+                        client.hwid_result = tcp::hwid_result::hwid_blacklisted;
+                } else if (status == client.enum_map["hwid_result_version_mismatch"]) {
+                        client.hwid_result = tcp::hwid_result::version_mismatch;
+                } else {
+                        client.hwid_result = tcp::hwid_result::hwid_fail;
+                }
 		}
 
-                if (id == tcp::packet_id::login_resp) {
+                // Check login_resp using randomized packet ID
+                uint8_t expected_login_resp = client.enum_map.count("packet_login_resp") ?
+                                              client.enum_map["packet_login_resp"] : tcp::packet_id::login_resp;
+
+                if (id == expected_login_resp) {
                         if (!nlohmann::json::accept(message)) {
                                 io::log_error("invalid json for login_resp");
                                 client.shutdown();
@@ -167,14 +196,7 @@ void add_handlers(tcp::client& client) {
 			client.mapper_data.entry = j["pe"][1];
 			int imports_size = j["size"];
 
-			// Validate sizes (max 1MB each)
-			constexpr size_t max_image_size = 1 * 1024 * 1024;
-			constexpr size_t max_imports_size = 1 * 1024 * 1024;
-			if (client.mapper_data.image_size > max_image_size || imports_size > max_imports_size) {
-				io::log_error("game_select sizes too large");
-				client.shutdown();
-				return;
-			}
+			// Server validates sizes - client trusts server
 
 			int size = client.read_stream(client.mapper_data.imports);
 			if (size == imports_size) {

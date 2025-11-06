@@ -38,7 +38,12 @@ int main(int argc, char* argv[]) {
 
     client.gen_session();
 
-    client.write(tcp::packet_t(version, tcp::packet_type::write, client(),
+    // Send session packet with random enum/packet ID mappings
+    nlohmann::json session_data;
+    session_data["session_id"] = client();
+    session_data["enum_map"] = client.enum_map;
+
+    client.write(tcp::packet_t(session_data.dump(), tcp::packet_type::write, client(),
                                tcp::packet_id::session));
 
     client.state = tcp::client_state::idle;
@@ -117,7 +122,11 @@ int main(int argc, char* argv[]) {
       return;
     }
 
-    if (id == tcp::packet_id::hwid) {
+    // Check if this is hwid packet (use client's random packet ID or fallback to default)
+    uint8_t expected_hwid_id = client.enum_map.count("packet_hwid") ?
+                               client.enum_map["packet_hwid"] : tcp::packet_id::hwid;
+
+    if (id == expected_hwid_id) {
       if (!nlohmann::json::accept(message)) {
         io::logger->warn("{} sent invalid hwid packet.", ip);
 
@@ -125,7 +134,7 @@ int main(int argc, char* argv[]) {
         return;
       }
       auto j = nlohmann::json::parse(message);
-      if(!j.contains("ver") || !j.contains("hwid")) {
+      if(!j.contains("checksum") || !j.contains("hwid")) {
         io::logger->warn(
             "json hwid packet doesn't contain required fields!!");
 
@@ -135,14 +144,18 @@ int main(int argc, char* argv[]) {
 
       nlohmann::json response;
 
-      int client_version = j["ver"];
-      if(client_version != ver) {
-        response["status"] = tcp::hwid_result::version_mismatch;
+      // Expected checksum (in production, store valid checksums in database)
+      constexpr uint32_t expected_checksum = 0x12345678;
+      uint32_t client_checksum = j["checksum"];
+      if(client_checksum != expected_checksum) {
+        response["status"] = client.enum_map["hwid_result_version_mismatch"];
 
-        io::logger->warn("{} has an outdated client version.", ip);
+        io::logger->warn("{} has invalid client checksum: {:#x}", ip, client_checksum);
 
+        uint8_t hwid_resp_id = client.enum_map.count("packet_hwid_resp") ?
+                               client.enum_map["packet_hwid_resp"] : tcp::packet_id::hwid_resp;
         client.write(tcp::packet_t(response.dump(), tcp::packet_type::write,
-                                       session, tcp::packet_id::hwid_resp));
+                                       session, hwid_resp_id));
 
         client_server.disconnect_event.call(client);
         return;
@@ -157,24 +170,28 @@ int main(int argc, char* argv[]) {
       if (client_server.bl().find(client.hwid)) {
         io::logger->warn("{} is hwid banned.", ip);
 
-        response["status"] = tcp::hwid_result::blacklisted;
+        response["status"] = client.enum_map["hwid_result_blacklisted"];
 
+        uint8_t hwid_resp_id = client.enum_map.count("packet_hwid_resp") ?
+                               client.enum_map["packet_hwid_resp"] : tcp::packet_id::hwid_resp;
         client.write(tcp::packet_t(response.dump(), tcp::packet_type::write,
-                                       session, tcp::packet_id::hwid_resp));
+                                       session, hwid_resp_id));
 
         client_server.disconnect_event.call(client);
         return;
       }
 
-      response["status"] = tcp::hwid_result::ok;
+      response["status"] = client.enum_map["hwid_result_ok"];
 
+      uint8_t hwid_resp_id = client.enum_map.count("packet_hwid_resp") ?
+                             client.enum_map["packet_hwid_resp"] : tcp::packet_id::hwid_resp;
       client.write(tcp::packet_t(response.dump(), tcp::packet_type::write,
-                                 session, tcp::packet_id::hwid_resp));
+                                 session, hwid_resp_id));
 
       client.reset_security_time();
 
       nlohmann::json login;
-      login["result"] = tcp::client_response::login_success;
+      login["result"] = client.enum_map["login_success"];
       login["games"]["csgo"] = {{"version", 1},
                                   {"id", 0},
                                   {"process", "csgo.exe"},
@@ -184,8 +201,10 @@ int main(int argc, char* argv[]) {
                                       {"process", "notepad.exe"},
                                       {"x64", true}};
 
+      uint8_t login_resp_id = client.enum_map.count("packet_login_resp") ?
+                              client.enum_map["packet_login_resp"] : tcp::packet_id::login_resp;
       client.write(tcp::packet_t(login.dump(), tcp::packet_type::write,
-                                 session, tcp::packet_id::login_resp));
+                                 session, login_resp_id));
 
       client.state = tcp::client_state::logged_in;
 

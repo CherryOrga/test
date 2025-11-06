@@ -36,6 +36,9 @@ class client {
 
   std::time_t security_time;
 
+  // Session-based random enum values
+  std::unordered_map<std::string, int> enum_map;
+
   client() : m_socket{-1}, m_security_timeout_seconds{5} {};
   client(const int& socket, const std::string_view ip)
       : m_socket{std::move(socket)}, m_ip{ip}, state{-1} {
@@ -44,6 +47,27 @@ class client {
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dist(5, 10);
     m_security_timeout_seconds = dist(gen);
+
+    // Generate random enum values for this session
+    std::uniform_int_distribution<> enum_dist(10000, 99999);
+    enum_map["hwid_result_ok"] = enum_dist(gen);
+    enum_map["hwid_result_blacklisted"] = enum_dist(gen);
+    enum_map["hwid_result_version_mismatch"] = enum_dist(gen);
+    enum_map["login_success"] = enum_dist(gen);
+    enum_map["login_fail"] = enum_dist(gen);
+
+    // Generate random packet IDs
+    std::uniform_int_distribution<> packet_dist(100, 255);
+    enum_map["packet_session"] = packet_dist(gen);
+    enum_map["packet_hwid"] = packet_dist(gen);
+    enum_map["packet_hwid_resp"] = packet_dist(gen);
+    enum_map["packet_login_resp"] = packet_dist(gen);
+    enum_map["packet_game_select"] = packet_dist(gen);
+    enum_map["packet_image"] = packet_dist(gen);
+    enum_map["packet_ban"] = packet_dist(gen);
+    enum_map["packet_security_report"] = packet_dist(gen);
+    enum_map["packet_function_request"] = packet_dist(gen);
+    enum_map["packet_function_bytes"] = packet_dist(gen);
   }
   ~client() = default;
 
