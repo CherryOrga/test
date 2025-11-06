@@ -38,6 +38,14 @@ int tcp::client::read_stream(std::vector<char>& out) {
 	read(&size, sizeof(size));
 
 	size = ntohl(size);
+
+	// Validate size to prevent buffer overflow
+	constexpr size_t max_stream_size = 100 * 1024 * 1024; // 100MB max
+	if (size == 0 || size > max_stream_size) {
+		io::log_error("invalid stream size: {}", size);
+		return -1;
+	}
+
 	out.resize(size);
 
 	constexpr size_t chunk_size = 4096;

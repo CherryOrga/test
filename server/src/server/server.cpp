@@ -62,11 +62,14 @@ tcp::select_status tcp::server::peek() {
 
   int maxfd = m_socket;
 
-  for (auto& c : client_stack) {
-    const int s = c.get_socket();
-    FD_SET(s, &m_server_set);
+  {
+    std::lock_guard<std::mutex> lock(m_client_mutex);
+    for (auto& c : client_stack) {
+      const int s = c.get_socket();
+      FD_SET(s, &m_server_set);
 
-    maxfd = std::max(maxfd, s);
+      maxfd = std::max(maxfd, s);
+    }
   }
 
   struct timeval tv;
@@ -101,24 +104,28 @@ void tcp::server::accept_client() {
   } else {
     client cli(client_socket, ip);
 
-    auto it = std::find_if(client_stack.begin(), client_stack.end(),
-                           [&](client& c) { return c.get_ip() == ip; });
-    if (it != client_stack.end()) {
-      io::logger->info("{} is already connected, dropping...", ip);
-      cli.cleanup();
-      return;
+    {
+      std::lock_guard<std::mutex> lock(m_client_mutex);
+      auto it = std::find_if(client_stack.begin(), client_stack.end(),
+                             [&](client& c) { return c.get_ip() == ip; });
+      if (it != client_stack.end()) {
+        io::logger->info("{} is already connected, dropping...", ip);
+        cli.cleanup();
+        return;
+      }
+
+      cli.reset();
+
+      connect_event.call(cli);
+
+      client_stack.emplace_back(std::move(cli));
     }
-    
-    cli.reset();
-
-    connect_event.call(cli);
-
-    client_stack.emplace_back(std::move(cli));
   }
 }
 
 void tcp::server::receive() {
   std::array<char, message_len> buf;
+  std::lock_guard<std::mutex> lock(m_client_mutex);
   for (auto& c : client_stack) {
     const int socket = c.get_socket();
 
@@ -142,12 +149,22 @@ void tcp::server::receive() {
 }
 
 void tcp::server::check_timeout() {
+  std::lock_guard<std::mutex> lock(m_client_mutex);
+
+  // Check for timeouts
   auto it = std::find_if(client_stack.begin(), client_stack.end(),
                          [&](client& c) { return c.timeout() || c.security_timeout(); });
 
   if (it != client_stack.end()) {
     timeout_event.call(*it);
   }
+
+  // Remove disconnected clients (socket == -1 after cleanup())
+  client_stack.erase(
+    std::remove_if(client_stack.begin(), client_stack.end(),
+                   [](const client& c) { return !c; }),
+    client_stack.end()
+  );
 }
 
 void tcp::server::stop() {

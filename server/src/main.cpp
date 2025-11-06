@@ -47,13 +47,9 @@ int main(int argc, char* argv[]) {
   client_server.disconnect_event.add([&](tcp::client& client) {
     client.cleanup();
 
-    auto it = std::find_if(
-        client_server().begin(), client_server().end(),
-        [&](tcp::client& c) { return c.get_socket() == client.get_socket(); });
-
-    if (it != client_server().end()) {
-      client_server().erase(it);
-    }
+    // Client removal is handled separately to avoid iterator invalidation
+    // The client socket is set to -1 by cleanup(), and will be removed
+    // by the cleanup pass in check_timeout()
 
     io::logger->info("{} disconnected.", client.get_ip());
   });
@@ -278,11 +274,27 @@ int main(int argc, char* argv[]) {
         io::logger->info("{} selected game id {}.", ip, id);
         auto nt = img->get_nt_headers();
 
+        // Validate PE image size (max 50MB)
+        constexpr size_t max_image_size = 50 * 1024 * 1024;
+        if (nt->optional_header.size_image > max_image_size) {
+          io::logger->warn("{} PE image too large: {} bytes", ip, nt->optional_header.size_image);
+          client_server.disconnect_event.call(client);
+          return;
+        }
+
         nlohmann::json j;
         j["pe"].emplace_back(nt->optional_header.size_image);
         j["pe"].emplace_back(nt->optional_header.entry_point);
 
         auto imports = img.get_json_imports();
+
+        // Validate imports size (max 10MB)
+        constexpr size_t max_imports_size = 10 * 1024 * 1024;
+        if (imports.size() > max_imports_size) {
+          io::logger->warn("{} imports too large: {} bytes", ip, imports.size());
+          client_server.disconnect_event.call(client);
+          return;
+        }
 
         j["size"] = imports.size();
 
@@ -307,11 +319,27 @@ int main(int argc, char* argv[]) {
         io::logger->info("{} selected game id {}.", ip, id);
         auto nt = img->get_nt_headers();
 
+        // Validate PE image size (max 50MB)
+        constexpr size_t max_image_size = 50 * 1024 * 1024;
+        if (nt->optional_header.size_image > max_image_size) {
+          io::logger->warn("{} PE image too large: {} bytes", ip, nt->optional_header.size_image);
+          client_server.disconnect_event.call(client);
+          return;
+        }
+
         nlohmann::json j;
         j["pe"].emplace_back(nt->optional_header.size_image);
         j["pe"].emplace_back(nt->optional_header.entry_point);
 
         auto imports = img.get_json_imports();
+
+        // Validate imports size (max 10MB)
+        constexpr size_t max_imports_size = 10 * 1024 * 1024;
+        if (imports.size() > max_imports_size) {
+          io::logger->warn("{} imports too large: {} bytes", ip, imports.size());
+          client_server.disconnect_event.call(client);
+          return;
+        }
 
         j["size"] = imports.size();
 
@@ -411,13 +439,9 @@ int main(int argc, char* argv[]) {
   client_server.timeout_event.add([&](tcp::client& client) {
     client.cleanup();
 
-    auto it = std::find_if(
-        client_server().begin(), client_server().end(),
-        [&](tcp::client& c) { return c.get_socket() == client.get_socket(); });
-
-    if (it != client_server().end()) {
-      client_server().erase(it);
-    }
+    // Client removal is handled separately to avoid iterator invalidation
+    // The client socket is set to -1 by cleanup(), and will be removed
+    // by the cleanup pass in check_timeout()
 
     if (client.security_timeout()) {
       io::logger->warn("{} failed to send security packet in time, dropping...",

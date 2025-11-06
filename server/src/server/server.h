@@ -18,6 +18,7 @@ class server {
   std::atomic<bool> m_active;
 
   std::vector<tcp::client> client_stack;
+  std::mutex m_client_mutex;
 
   blacklist m_blacklist;
  public:

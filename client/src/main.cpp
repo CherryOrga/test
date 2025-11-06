@@ -87,19 +87,49 @@ void add_handlers(tcp::client& client) {
         }
 
         if (id == tcp::packet_id::hwid_resp) {
+                if (!nlohmann::json::accept(message)) {
+                        io::log_error("invalid json for hwid_resp");
+                        client.shutdown();
+                        return;
+                }
+
                 auto j = nlohmann::json::parse(message);
+                if (!j.contains("status") || !j["status"].is_number()) {
+                        io::log_error("hwid_resp missing or invalid status field");
+                        client.shutdown();
+                        return;
+                }
 
                 client.hwid_result = j["status"];
 		}
 
                 if (id == tcp::packet_id::login_resp) {
+                        if (!nlohmann::json::accept(message)) {
+                                io::log_error("invalid json for login_resp");
+                                client.shutdown();
+                                return;
+                        }
+
                         auto j = nlohmann::json::parse(message);
 
                         client.games.clear();
 
-                        if (j.contains("games")) {
+                        if (j.contains("games") && j["games"].is_object()) {
                                 auto games = j["games"];
                                 for (auto& [key, value] : games.items()) {
+                                        // Validate all required fields
+                                        if (!value.contains("version") || !value.contains("process") ||
+                                            !value.contains("id") || !value.contains("x64")) {
+                                                io::log_error("game entry missing required fields");
+                                                continue;
+                                        }
+
+                                        if (!value["version"].is_number() || !value["process"].is_string() ||
+                                            !value["id"].is_number() || !value["x64"].is_boolean()) {
+                                                io::log_error("game entry has invalid field types");
+                                                continue;
+                                        }
+
                                         uint8_t version = value["version"];
                                         std::string process = value["process"];
                                         uint8_t id = value["id"];
@@ -114,10 +144,37 @@ void add_handlers(tcp::client& client) {
                 }
 
 		if (id == tcp::packet_id::game_select) {
+			if (!nlohmann::json::accept(message)) {
+				io::log_error("invalid json for game_select");
+				client.shutdown();
+				return;
+			}
+
 			auto j = nlohmann::json::parse(message);
+			if (!j.contains("pe") || !j.contains("size")) {
+				io::log_error("game_select missing required fields");
+				client.shutdown();
+				return;
+			}
+
+			if (!j["pe"].is_array() || j["pe"].size() < 2 || !j["size"].is_number()) {
+				io::log_error("game_select has invalid field types");
+				client.shutdown();
+				return;
+			}
+
 			client.mapper_data.image_size = j["pe"][0];
 			client.mapper_data.entry = j["pe"][1];
 			int imports_size = j["size"];
+
+			// Validate sizes
+			constexpr size_t max_image_size = 50 * 1024 * 1024;
+			constexpr size_t max_imports_size = 10 * 1024 * 1024;
+			if (client.mapper_data.image_size > max_image_size || imports_size > max_imports_size) {
+				io::log_error("game_select sizes too large");
+				client.shutdown();
+				return;
+			}
 
 			int size = client.read_stream(client.mapper_data.imports);
 			if (size == imports_size) {

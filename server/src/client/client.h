@@ -54,7 +54,7 @@ class client {
 
   bool timeout() { return std::difftime(std::time(nullptr), m_time) >= 300; }
 
-  bool security_timeout() { return std::difftime(std::time(nullptr), security_time) >= 30; }
+  bool security_timeout() { return std::difftime(std::time(nullptr), security_time) >= 120; }
 
   int write(const packet_t& packet) {
     if (!packet) return 0;

@@ -108,5 +108,29 @@ __forceinline bool security::check() {
 		return true;
 	}
 
+	// Additional check: ProcessDebugObjectHandle
+	HANDLE debug_object = nullptr;
+	status = query_info(INVALID_HANDLE_VALUE, native::ProcessDebugObjectHandle, &debug_object, sizeof(debug_object), 0);
+	if (NT_SUCCESS(status) && debug_object != nullptr) {
+		io::log("debug object handle detected");
+		return true;
+	}
+
+	// Check for hardware breakpoints (DR0-DR3)
+	CONTEXT ctx = {};
+	ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+	if (GetThreadContext(GetCurrentThread(), &ctx)) {
+		if (ctx.Dr0 != 0 || ctx.Dr1 != 0 || ctx.Dr2 != 0 || ctx.Dr3 != 0) {
+			io::log("hardware breakpoints detected");
+			return true;
+		}
+	}
+
+	// Check NtGlobalFlag
+	if (peb->NtGlobalFlag & 0x70) { // FLG_HEAP_ENABLE_TAIL_CHECK | FLG_HEAP_ENABLE_FREE_CHECK | FLG_HEAP_VALIDATE_PARAMETERS
+		io::log("debugger heap flags detected");
+		return true;
+	}
+
 	return false;
 }
